@@ -231,7 +231,7 @@ function chainOf(fmt, heading) {
   const slot = heading ? 'chainHeading' : 'chain';
   if (fmt[slot]) return fmt[slot];
   const chain = [];
-  if (fmt.href) chain.push({ open: `<a href="${escUrl(fmt.href)}">`, close: '</a>' });
+  if (fmt.href) chain.push({ open: `<a href="${escUrl(fmt.href)}">`, close: '</a>', link: true });
   const styles = [];
   if (!heading && fmt.fs) styles.push(`font-size:${fmt.fs / 2}pt`);
   if (fmt.color) styles.push(`color:${fmt.color}`);
@@ -269,16 +269,19 @@ function renderInline(runs, heading) {
       out += run.img;
       continue;
     }
-    // Seules les balises qui diffèrent du passage précédent sont refermées :
-    // les passages voisins de même format fusionnent, les autres s'imbriquent.
+    // On garde ouvertes les balises encore valables et on n'ouvre que celles
+    // qui manquent : les passages voisins fusionnent, les autres s'imbriquent.
     const chain = chainOf(run.f, heading);
-    let same = 0;
-    while (same < open.length && same < chain.length && open[same].open === chain[same].open) same++;
-    if (same !== open.length || same !== chain.length) {
-      closeTo(same);
-      for (let k = same; k < chain.length; k++) {
-        out += chain[k].open;
-        open.push(chain[k]);
+    let keep = 0;
+    while (keep < open.length && chain.some((el) => el.open === open[keep].open)) keep++;
+    // Un lien enveloppe toujours les autres balises.
+    if (chain.length && chain[0].link && !(keep && open[0].open === chain[0].open)) keep = 0;
+    if (keep !== open.length || keep !== chain.length) {
+      closeTo(keep);
+      for (const el of chain) {
+        if (open.some((kept) => kept.open === el.open)) continue;
+        out += el.open;
+        open.push(el);
       }
     }
     text += run.t;
@@ -428,7 +431,7 @@ function rtfToHtml(input, options) {
   let i = 0;
   if (n >= 3 && b[0] === 0xef && b[1] === 0xbb && b[2] === 0xbf) i = 3;
   while (i < n && (b[i] === 0x20 || b[i] === 0x09 || b[i] === 0x0d || b[i] === 0x0a)) i++;
-  if (b.latin1Slice(i, i + 5) !== '{\\rtf') {
+  if (n - i < 5 || b.latin1Slice(i, i + 5) !== '{\\rtf') {
     throw new Error("Ce fichier n'est pas un document RTF valide.");
   }
 
@@ -711,8 +714,12 @@ function rtfToHtml(input, options) {
         return;
       case X_FLDRSLT:
         if (from === D_BODY) {
-          st.href = linkOfField();
-          st.fmt = null;
+          // Un champ sans lien (PAGEREF…) dans le résultat d'un lien reste dans ce lien.
+          const link = linkOfField();
+          if (link) {
+            st.href = link;
+            st.fmt = null;
+          }
         }
         return;
       case X_SHPTXT:
