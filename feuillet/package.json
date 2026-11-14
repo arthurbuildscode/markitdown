@@ -5,11 +5,11 @@
   "main": "electron/main.js",
   "scripts": {
     "dev": "vite",
-    "dev:app": "FEUILLET_DEV_URL=http://localhost:5173 electron .",
+    "dev:app": "electron . --dev",
     "build": "vite build",
     "start": "vite build && electron .",
     "dist": "vite build && node scripts/build-win.js",
-    "test:e2e": "vite build && xvfb-run -a node tests/e2e.js"
+    "test:e2e": "vite build && node tests/e2e.js"
   },
   "author": "Feuillet",
   "license": "MIT",
@@ -34,7 +34,6 @@
     "vite": "^8.3.8"
   },
   "dependencies": {
-    "@iarna/rtf-to-html": "^1.1.0",
     "@turbodocx/html-to-docx": "^1.23.3",
     "@xmldom/xmldom": "^0.9.12",
     "jszip": "^3.10.2",

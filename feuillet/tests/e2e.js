@@ -3,7 +3,7 @@
  * Test de bout en bout : lance l'application Electron et vérifie le parcours
  * essentiel (saisie, enregistrement, réouverture, import, export PDF, fermeture).
  *
- *   npm run test:e2e            (Linux : nécessite xvfb)
+ *   npm run test:e2e            (Linux sans écran : xvfb-run -a npm run test:e2e)
  *
  * Variables : FEUILLET_SAMPLES = dossier de fichiers à importer (facultatif),
  *             FEUILLET_SHOTS   = dossier où écrire des captures d'écran (facultatif).
@@ -21,6 +21,10 @@ const shots = process.env.FEUILLET_SHOTS || null;
 const samples = process.env.FEUILLET_SAMPLES || null;
 
 const log = (message) => console.log(`✓ ${message}`);
+
+/** Image JPEG minimale (1 × 1 pixel). */
+const JPEG_PIXEL =
+  '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkICQkKDA8MCgsOCwkJDRENDg8QEBEQCgwSExIQEw8QEBD/yQALCAABAAEBAREA/8wABgAQEAX/2gAIAQEAAD8A0s8g/9k=';
 
 async function shot(page, name) {
   if (shots) await page.screenshot({ path: path.join(shots, `${name}.png`) });
@@ -141,6 +145,37 @@ async function pageText(page) {
     await shot(second, '02-reouverture');
     log('réouverture du .docx enregistré');
     await second.close();
+
+    // Document avec image : deux enregistrements successifs ne doivent ni dupliquer l'image ni la renommer.
+    const pagePath = path.join(work, 'image.html');
+    fs.writeFileSync(pagePath, `<h1>Image</h1><p><img src="data:image/jpeg;base64,${JPEG_PIXEL}" width="40" height="40"></p>`);
+    const [withImage] = await Promise.all([
+      app.waitForEvent('window'),
+      first.evaluate((file) => window.feuillet.newWindow(file), pagePath),
+    ]);
+    watch(withImage);
+    await waitForEditor(withImage);
+    await withImage.waitForSelector('.paged-editor__pages img');
+    const imageDocx = path.join(work, 'image.docx');
+    await app.evaluate(({ dialog }, target) => {
+      dialog.showSaveDialog = async () => ({ canceled: false, filePath: target });
+    }, imageDocx);
+    const saveFromMenu = async (page) => {
+      await page.getByRole('menubar').getByText('Fichier', { exact: true }).click();
+      await page.getByRole('button', { name: 'Enregistrer Ctrl+S' }).click();
+    };
+    await saveFromMenu(withImage);
+    await withImage.waitForFunction(() => document.title.startsWith('image.docx – '));
+    await withImage.locator('.paged-editor__pages .layout-page').first().click({ position: { x: 300, y: 400 } });
+    await withImage.keyboard.type('x');
+    await withImage.waitForFunction(() => document.title.includes('*'));
+    await saveFromMenu(withImage);
+    await withImage.waitForFunction(() => !document.title.includes('*'));
+    const media = Object.keys((await JSZip.loadAsync(fs.readFileSync(imageDocx))).files).filter((name) => /^word\/media\/./.test(name));
+    assert.equal(media.length, 1, `images en double : ${media.join(', ')}`);
+    assert.match(media[0], /\.jpe?g$/);
+    log('document avec image : enregistrements répétés sans duplication');
+    await withImage.close();
 
     // Import des autres formats.
     if (samples) {

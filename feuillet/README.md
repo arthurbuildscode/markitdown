@@ -49,7 +49,7 @@ Prérequis : Node.js 22 ou plus récent.
 ```bash
 npm install
 npm start            # construit l'interface et lance l'application
-npm run test:e2e     # test de bout en bout (sous Linux : nécessite xvfb)
+npm run test:e2e     # test de bout en bout (sous Linux sans écran : xvfb-run -a npm run test:e2e)
 npm run dist         # produit release/Feuillet-Setup-<version>.exe
 ```
 

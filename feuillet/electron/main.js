@@ -5,9 +5,11 @@ const os = require('node:os');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const { OPEN_FILTERS, extensionOf, isSupported, importFile } = require('./converters');
+const { tidyDocxMedia } = require('./docxMedia');
 
 const APP_NAME = 'Feuillet';
-const DEV_URL = process.env.FEUILLET_DEV_URL || null;
+/** `electron . --dev` : l'interface est servie par Vite (npm run dev) au lieu du dossier dist. */
+const DEV_URL = process.argv.includes('--dev') ? 'http://localhost:5173' : null;
 const MAX_RECENTS = 10;
 
 /** État par fenêtre : { initialFile, dirty, closing }. */
@@ -207,7 +209,7 @@ function buildMenu() {
               detail:
                 'Traitement de texte pour documents Word.\n\n' +
                 'Moteur d’édition : docx-editor (Apache-2.0). ' +
-                'Conversions : word-extractor, html-to-docx, rtf-to-html, marked (MIT).',
+                'Conversions : html-to-docx, word-extractor, marked (MIT).',
               buttons: ['OK'],
             }),
         },
@@ -293,9 +295,15 @@ function registerIpc() {
     }
     // Écriture dans un fichier voisin puis renommage : une panne en cours
     // d'écriture ne peut pas abîmer le document existant.
+    let bytes = Buffer.from(data);
+    try {
+      bytes = await tidyDocxMedia(bytes);
+    } catch {
+      // La remise en ordre des images est un confort : en cas d'échec, on écrit le document tel quel.
+    }
     const tmp = `${filePath}.${process.pid}.tmp`;
     try {
-      await fsp.writeFile(tmp, Buffer.from(data));
+      await fsp.writeFile(tmp, bytes);
       await fsp.rename(tmp, filePath);
     } catch (error) {
       await fsp.rm(tmp, { force: true }).catch(() => {});

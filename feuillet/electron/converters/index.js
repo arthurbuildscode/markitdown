@@ -105,20 +105,6 @@ async function htmlToDocx(html) {
   return Buffer.isBuffer(result) ? result : Buffer.from(await result.arrayBuffer());
 }
 
-async function rtfToHtml(buffer) {
-  const rtfToHTML = require('@iarna/rtf-to-html');
-  return new Promise((resolve, reject) => {
-    // Après un caractère Unicode (\\uN), le RTF fournit un caractère de repli
-    // destiné aux anciens lecteurs ; la bibliothèque l'afficherait en double.
-    const rtf = buffer.toString('latin1').replace(/(\\u-?\d+) ?(?:\?|\\'[0-9a-fA-F]{2})/g, '$1 ');
-    rtfToHTML.fromString(
-      rtf,
-      { template: (_doc, _defaults, content) => content },
-      (err, html) => (err ? reject(err) : resolve(html)),
-    );
-  });
-}
-
 /** Un modèle (.dotx/.dotm) devient un document ordinaire en changeant son type de contenu. */
 async function templateToDocument(buffer) {
   const JSZip = require('jszip');
@@ -154,8 +140,17 @@ async function zipKind(buffer) {
  */
 async function importBuffer(buffer, ext) {
   let kind = sniff(buffer, ext);
-  if (kind === 'zip') kind = await zipKind(buffer);
-  if (kind === 'ole') kind = 'doc';
+  if (kind === 'zip') {
+    try {
+      kind = await zipKind(buffer);
+    } catch {
+      throw new Error('Ce fichier est endommagé : son contenu est illisible.');
+    }
+  } else if ([...NATIVE_EXTENSIONS, ...TEMPLATE_EXTENSIONS, 'odt'].includes(kind)) {
+    // L'extension annonce un format compressé, mais le contenu n'en est pas un.
+    throw new Error("Ce fichier n'est pas un document valide : il est vide ou endommagé.");
+  }
+  if (kind === 'ole' || kind === 'dot') kind = 'doc';
 
   switch (kind) {
     case 'docx': {
@@ -173,8 +168,10 @@ async function importBuffer(buffer, ext) {
       const { docToHtml } = require('./doc');
       return { data: await htmlToDocx(await docToHtml(buffer)), native: false, format: 'doc' };
     }
-    case 'rtf':
+    case 'rtf': {
+      const { rtfToHtml } = require('./rtf');
       return { data: await htmlToDocx(await rtfToHtml(buffer)), native: false, format: 'rtf' };
+    }
     case 'md':
     case 'markdown': {
       const { marked } = require('marked');
