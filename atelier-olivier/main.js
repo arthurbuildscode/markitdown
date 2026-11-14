@@ -106,10 +106,14 @@ function createWindow() {
     },
   });
 
-  mainWindow.once('ready-to-show', () => {
+  const reveal = () => {
+    if (!mainWindow || mainWindow.isVisible()) return;
     mainWindow.maximize();
     mainWindow.show();
-  });
+  };
+  mainWindow.once('ready-to-show', reveal);
+  // Garde-fou : la fenêtre s'affiche quoi qu'il arrive, même si le premier rendu tarde.
+  setTimeout(reveal, 4000);
 
   mainWindow.webContents.on('will-navigate', (event) => event.preventDefault());
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {

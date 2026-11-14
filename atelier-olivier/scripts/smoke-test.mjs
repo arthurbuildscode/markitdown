@@ -2,7 +2,7 @@
 // exporte dans tous les formats, puis essaie le recadrage et les deux fonctions IA.
 //   npm test                       -> version de développement
 //   ATELIER_EXE=chemin npm test    -> application empaquetée
-import { _electron as electron, chromium } from 'playwright-core';
+import { chromium } from 'playwright-core';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -10,33 +10,26 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const packaged = process.env.ATELIER_EXE;
-const flags = process.platform === 'linux' ? ['--no-sandbox'] : [];
+const executable = packaged || createRequire(import.meta.url)('electron');
+const port = 9300 + Math.floor(Math.random() * 500);
+const args = [...(packaged ? [] : [root]), ...(process.platform === 'linux' ? ['--no-sandbox'] : []), `--remote-debugging-port=${port}`];
 
-let page;
-let close;
-if (packaged) {
-  // Application empaquetée : on s'y connecte par le port de débogage de Chromium.
-  const port = 9300 + Math.floor(Math.random() * 500);
-  const child = spawn(packaged, [...flags, `--remote-debugging-port=${port}`], { stdio: 'ignore' });
-  let browser = null;
-  for (let attempt = 0; attempt < 60 && !browser; attempt++) {
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`).catch(() => null);
-  }
-  if (!browser) {
-    child.kill();
-    throw new Error("L'application empaquetée n'a pas démarré");
-  }
-  page = browser.contexts()[0].pages()[0];
-  close = async () => {
-    await browser.close();
-    child.kill();
-  };
-} else {
-  const app = await electron.launch({ executablePath: createRequire(import.meta.url)('electron'), args: [root, ...flags], cwd: root });
-  page = await app.firstWindow();
-  close = () => app.close();
+// On lance l'application telle quelle et on s'y connecte par le port de débogage de Chromium.
+const child = spawn(executable, args, { cwd: root, stdio: 'ignore' });
+let browser = null;
+for (let attempt = 0; attempt < 60 && !browser; attempt++) {
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`).catch(() => null);
 }
+if (!browser) {
+  child.kill();
+  throw new Error("L'application n'a pas démarré");
+}
+const page = browser.contexts()[0].pages()[0];
+const close = async () => {
+  await browser.close();
+  child.kill();
+};
 const errors = [];
 page.on('pageerror', (error) => errors.push(error.message));
 page.on('console', (message) => message.type() === 'error' && errors.push(message.text()));
