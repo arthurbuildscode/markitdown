@@ -35,7 +35,8 @@ de créer un `.docx` à côté de l'original, qui n'est jamais modifié.
 
 ### Limites connues
 
-- Conversion `.doc` / `.rtf` / `.odt` : les images, en-têtes, pieds de page et notes ne sont pas repris ;
+- Conversion `.doc` / `.rtf` / `.odt` : les en-têtes, pieds de page et notes ne sont pas repris, ni les
+  images (sauf les PNG et JPEG des fichiers `.rtf`) ;
   les fichiers Word 6/95 sont ouverts en texte brut ; les fichiers protégés par mot de passe sont refusés.
 - Les images vectorielles WMF/EMF ne s'affichent pas.
 - Pas de correcteur orthographique.

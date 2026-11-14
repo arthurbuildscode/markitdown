@@ -71,16 +71,27 @@ function textToHtml(text) {
     .join('');
 }
 
-/** Retire ce qui n'a pas sa place dans un document : scripts, styles, cadres. */
+/** Nettoie les attributs d'une balise : gestionnaires d'événements et liens. */
+function sanitizeTag(tag) {
+  return tag
+    .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/\shref\s*=\s*("[^"]*"|'[^']*')/gi, (attribute, quoted) => {
+      // Le convertisseur n'interprète pas les entités des attributs : on lui donne l'adresse en clair.
+      const url = quoted.slice(1, -1).replace(/&amp;/g, '&').trim();
+      return /^(https?:|mailto:|#)/i.test(url) ? ` href="${url.replace(/"/g, '%22')}"` : '';
+    });
+}
+
+/** Retire ce qui n'a pas sa place dans un document : scripts, styles, cadres, images distantes. */
 function sanitizeHtml(html) {
   const body = /<body[^>]*>([\s\S]*)<\/body>/i.exec(html);
   return (body ? body[1] : html)
     .replace(/<(script|style|iframe|object|embed|noscript|template|head)\b[\s\S]*?<\/\1>/gi, '')
     .replace(/<(script|style|iframe|object|embed|link|meta|base)\b[^>]*>/gi, '')
     .replace(/<!--[\s\S]*?-->/g, '')
-    .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
     // Les images distantes ou locales ne sont pas récupérées : seules les images intégrées sont gardées.
-    .replace(/<img\b(?![^>]*\ssrc\s*=\s*["']?data:image\/)[^>]*>/gi, '');
+    .replace(/<img\b(?![^>]*\ssrc\s*=\s*["']?data:image\/)[^>]*>/gi, '')
+    .replace(/<[a-zA-Z][^>]*>/g, sanitizeTag);
 }
 
 async function htmlToDocx(html) {

@@ -2,7 +2,7 @@
 /**
  * Conversion RTF → HTML simple (fragment de corps), sans dépendance.
  * Couvre le texte et son encodage (pages de codes, \u), gras/italique/souligné/
- * barré, exposant/indice, taille et couleur, l'alignement, les titres, les
+ * barré, exposant/indice, taille, couleur et surlignage, l'alignement, les titres, les
  * listes, les tableaux, les liens et les images PNG/JPEG intégrées. Les en-têtes,
  * pieds de page, notes, objets OLE et images vectorielles (WMF/EMF) ne sont pas repris.
  *
@@ -36,7 +36,7 @@ for (const word of (
   'colorschememapping datastore latentstyles generator template filetbl revtbl rsidtbl pgptbl ' +
   'annotation atnid atnauthor atndate atntime atnref atnicn atnparent atrfstart atrfend bkmkstart ' +
   'bkmkend falt panose fname ftnsep ftnsepc ftncn aftnsep aftnsepc aftncn keycode formfield ' +
-  'datafield pnseclvl mmathPr xmlnstbl userprops private background wgrffmtfilter pgdsctbl docvar ' +
+  'datafield pnseclvl mmathPr xmlnstbl userprops background wgrffmtfilter pgdsctbl docvar ' +
   'picprop blipuid htmltag mhtmltag levelmarker expandedcolortbl listpicture do'
 ).split(' ')) {
   DESTS.set(word, X_SKIP);
@@ -70,7 +70,7 @@ const UNDERLINES = new Set(
     'ulthdash ulthdashd ulthdashdd ulthldash').split(' '),
 );
 
-const SPECIAL_CHARS = {
+const SPECIAL_CHARS = new Map(Object.entries({
   emdash: '\u2014',
   endash: '\u2013',
   lquote: '\u2018',
@@ -86,13 +86,30 @@ const SPECIAL_CHARS = {
   tab: '\t',
   line: '\n',
   lbr: '\n',
-};
+}));
 
-const PN_ORDERED = new Set(['pnlvlbody', 'pndec', 'pnucltr', 'pnlcltr', 'pnucrm', 'pnlcrm', 'pnord', 'pnordt', 'pncard']);
+const ALIGNMENTS = new Map([
+  ['ql', ''],
+  ['qc', 'center'],
+  ['qr', 'right'],
+  ['qj', 'justify'],
+  ['qd', 'justify'],
+]);
+// Mots qui fixent la page de codes du document.
+const CHARSET_WORDS = new Map([['mac', 10000], ['pc', 437], ['pca', 850]]);
 
-const HEADING_NAME = /^(?:heading|titre|überschrift|ueberschrift|título|titulo|titolo|kop|rubrik|overskrift)\s*([1-9])$/i;
-// « o » seul est une puce courante (Courier New) : une lettre n'est un numéro que suivie d'un point ou d'une parenthèse.
+const PN_ORDERED = new Set('pnlvlbody pndec pnucltr pnlcltr pnucrm pnlcrm pnord pnordt pncard'.split(' '));
+
+// Word écrit toujours « heading N » ; LibreOffice traduit le nom du style.
+const HEADING_NAME =
+  /^(?:heading|titre|überschrift|ueberschrift|título|titulo|titolo|kop|rubrik|overskrift)\s*([1-9])$/i;
+// « o » seul est une puce courante (Courier New) : une lettre n'est un numéro
+// que suivie d'un point ou d'une parenthèse.
 const ORDERED_MARKER = /^\(?(?:\d+(?:\.\d+)*[.):]?|[A-Za-z]{1,6}[.)])/;
+const ROMAN = /^m{0,3}(?:cm|cd|d?c{0,3})(?:xc|xl|l?x{0,3})(?:ix|iv|v?i{0,3})$/;
+const ROMAN_VALUES = { i: 1, v: 5, x: 10, l: 50, c: 100, d: 500, m: 1000 };
+// \levelnfcN → list-style-type CSS (0 et le reste : décimal).
+const NFC_TYPES = { 1: 'upper-roman', 2: 'lower-roman', 3: 'upper-alpha', 4: 'lower-alpha' };
 const LINK_SCHEME = /^(?:https?:\/\/|mailto:)/i;
 const MAX_IMAGE_WIDTH = 600;
 
@@ -150,6 +167,7 @@ const DOS_HIGH = {
 const CP1252_C1 = '€\u0081‚ƒ„…†‡ˆ‰Š‹Œ\u008dŽ\u008f\u0090‘’“”•–—˜™š›œ\u009džŸ';
 
 const codePages = new Map();
+let utf8 = null;
 
 /** @returns {{ cp: number, sb: string[] | null, dec: TextDecoder | null }} */
 function codePage(cp) {
@@ -192,13 +210,47 @@ function isLeadByte(cp, v) {
   return v >= 0x81 && v <= 0xfe;
 }
 
+/**
+ * Type et premier numéro d'une liste numérotée, d'après la puce calculée par
+ * l'auteur du fichier (« 3. », « b) », « iv. ») : une liste interrompue par un
+ * paragraphe ordinaire reprend ainsi au bon numéro.
+ */
+function numberingOf(marker, nfc) {
+  const match = /^\(?([0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)/.exec(marker);
+  const token = match ? match[1].split('.').pop() : '';
+  let type = NFC_TYPES[nfc] || 'decimal';
+  let start = 1;
+  if (/^\d+$/.test(token)) {
+    type = 'decimal';
+    start = parseInt(token, 10);
+  } else if (token) {
+    const lower = token.toLowerCase();
+    const cased = token === lower ? 'lower' : 'upper';
+    // Sans table des listes : « i », « v », « x » sont lus comme des chiffres
+    // romains, « c », « d », « l », « m » comme des lettres.
+    const declared = nfc >= 1 && nfc <= 4;
+    const roman = ROMAN.test(lower) && (declared ? nfc <= 2 : !/^[cdlm]$/.test(lower));
+    if (roman) {
+      type = `${cased}-roman`;
+      start = 0;
+      for (let k = 0; k < lower.length; k++) {
+        const value = ROMAN_VALUES[lower[k]];
+        start += value < (ROMAN_VALUES[lower[k + 1]] || 0) ? -value : value;
+      }
+    } else {
+      type = `${cased}-alpha`;
+      if (lower.length === 1) start = lower.charCodeAt(0) - 96;
+    }
+  }
+  return { type, start: start > 0 && start < 32768 ? start : 1 };
+}
+
 /* ------------------------------------------------------------------ */
 /* Rendu HTML                                                          */
 /* ------------------------------------------------------------------ */
 
 const LONE_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g;
 // Caractères interdits en XML : ils rendraient le .docx illisible.
-// eslint-disable-next-line no-control-regex
 const FORBIDDEN = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\ufffe\uffff]/g;
 const ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '\t': '&#9;', '\n': '<br>' };
 
@@ -327,6 +379,13 @@ function renderBlocks(blocks, out) {
     } else if (block.list) {
       const item = block.list;
       const tag = item.ordered ? 'ol' : 'ul';
+      let opening = `<${tag}>`;
+      if (item.ordered) {
+        const { type, start } = item.numbering;
+        const from = start !== 1 ? ` start="${start}"` : '';
+        const style = type !== 'decimal' ? ` style="list-style-type:${type}"` : '';
+        opening = `<ol${from}${style}>`;
+      }
       while (lists.length && listDepth(item, lists[lists.length - 1]) < 0) {
         out.push(`</li></${lists.pop().tag}>`);
       }
@@ -336,11 +395,11 @@ function renderBlocks(blocks, out) {
         if (top.tag === tag && (top.ls === item.ls || lists.length > 1)) {
           out.push('</li>');
         } else {
-          out.push(`</li></${top.tag}><${tag}>`);
+          out.push(`</li></${top.tag}>`, opening);
         }
         lists.pop();
       } else {
-        out.push(`<${tag}>`);
+        out.push(opening);
       }
       lists.push({ tag, ls: item.ls, ilvl: item.ilvl, li: item.li });
       out.push('<li>', renderInline(block.runs, false));
@@ -390,35 +449,6 @@ function newState() {
   };
 }
 
-function cloneState(s) {
-  return {
-    dest: s.dest,
-    uc: s.uc,
-    font: s.font,
-    cp: s.cp,
-    b: s.b,
-    i: s.i,
-    ul: s.ul,
-    strike: s.strike,
-    caps: s.caps,
-    va: s.va,
-    fs: s.fs,
-    cf: s.cf,
-    hl: s.hl,
-    hidden: s.hidden,
-    href: s.href,
-    fmt: s.fmt,
-    align: s.align,
-    s: s.s,
-    outline: s.outline,
-    intbl: s.intbl,
-    ls: s.ls,
-    ilvl: s.ilvl,
-    li: s.li,
-    pn: s.pn,
-  };
-}
-
 /**
  * @param {Buffer | Uint8Array} input contenu du fichier .rtf
  * @param {{ fonts?: boolean }} [options] `fonts` : émettre aussi les polices (font-family)
@@ -465,7 +495,7 @@ function rtfToHtml(input, options) {
 
   // --- Document en construction
   const body = [];
-  let para = { runs: [], lt: '', hasLt: false };
+  let para = { runs: [], lt: '', hasLt: false, filled: false };
   let table = null; // tableau ouvert en fin de `body`
   let cells = []; // cellules terminées de la ligne en cours
   let cell = []; // paragraphes de la cellule en cours
@@ -507,8 +537,11 @@ function rtfToHtml(input, options) {
   }
 
   function curFormat() {
-    const color = st.cf > 0 && colors[st.cf] && colors[st.cf] !== '#000000' ? colors[st.cf] : '';
     const bg = (st.hl > 0 && colors[st.hl]) || '';
+    let color = (st.cf > 0 && colors[st.cf]) || '';
+    // Noir : couleur par défaut. Blanc sans surlignage : texte posé sur une trame
+    // de fond que l'on ne reprend pas, il deviendrait invisible.
+    if (color === '#000000' || (color === '#ffffff' && !bg)) color = '';
     let fontName = '';
     if (useFonts) {
       const font = fonts.get(st.font < 0 ? deff : st.font);
@@ -533,6 +566,7 @@ function rtfToHtml(input, options) {
         if (st.hidden) return;
         const fmt = st.fmt || curFormat();
         if (st.caps) text = text.toUpperCase();
+        if (!para.filled && /[^\s]/.test(text)) para.filled = true;
         const runs = para.runs;
         const last = runs.length ? runs[runs.length - 1] : null;
         if (last && last.f === fmt) last.t += text;
@@ -603,10 +637,10 @@ function rtfToHtml(input, options) {
     } else {
       // Pas de puce calculée par l'auteur du fichier : on se fie aux tables.
       if (nfc === 255 || !(st.ls > 0 || st.pn)) return null;
-      if (nfc < 0 && !st.pn && !hasContent(p.runs)) return null;
+      if (nfc < 0 && !st.pn && !p.filled) return null;
       ordered = nfc >= 0 ? numbered : st.pn === 2;
     }
-    return { ordered, ls: st.ls, ilvl: st.ilvl, li: st.li };
+    return { ordered, ls: st.ls, ilvl: st.ilvl, li: st.li, numbering: ordered ? numberingOf(marker, nfc) : null };
   }
 
   function closeRow() {
@@ -626,7 +660,7 @@ function rtfToHtml(input, options) {
   /** Termine le paragraphe courant avec les propriétés en vigueur à cet instant. */
   function endPara(inCell) {
     const p = para;
-    para = { runs: [], lt: '', hasLt: false };
+    para = { runs: [], lt: '', hasLt: false, filled: false };
     let level = styleLevels.get(st.s) || 0;
     if (!level && st.outline >= 0 && st.outline < 9) level = st.outline + 1;
     const block = {
@@ -646,13 +680,13 @@ function rtfToHtml(input, options) {
   }
 
   function flushPara() {
-    if (hasContent(para.runs)) endPara(cells.length > 0 || cell.length > 0);
+    if (para.filled) endPara(cells.length > 0 || cell.length > 0);
   }
 
   function finishPict() {
     const p = pic;
     pic = null;
-    if (!p || !p.type) return;
+    if (!p || !p.type || st.hidden) return;
     let data;
     if (p.bin) {
       data = p.bin;
@@ -697,6 +731,7 @@ function rtfToHtml(input, options) {
       size = ` width="${Math.round(width)}" height="${Math.max(1, Math.round(height))}"`;
     }
     const mime = isPng ? 'image/png' : 'image/jpeg';
+    para.filled = true;
     para.runs.push({ t: '', f: null, img: `<img src="data:${mime};base64,${data.toString('base64')}"${size}>` });
   }
 
@@ -778,7 +813,7 @@ function rtfToHtml(input, options) {
           return true;
         }
         if (curFont && word === 'fcharset') {
-          curFont.cp = CHARSET_CP[param] != null ? CHARSET_CP[param] : null;
+          curFont.cp = CHARSET_CP[param] || null;
           return true;
         }
         if (curFont && word === 'cpg' && has) {
@@ -873,7 +908,7 @@ function rtfToHtml(input, options) {
         return;
       case 'row':
         if (inBody) {
-          if (hasContent(para.runs)) endPara(true);
+          if (para.filled) endPara(true);
           else para.runs = [];
           closeRow();
         }
@@ -885,7 +920,7 @@ function rtfToHtml(input, options) {
       case 'page':
       case 'sect':
       case 'column':
-        if (inBody && hasContent(para.runs)) endPara(false);
+        if (inBody && para.filled) endPara(false);
         return;
       // --- Paragraphe
       case 'pard':
@@ -897,19 +932,6 @@ function rtfToHtml(input, options) {
         st.ilvl = 0;
         st.li = 0;
         st.pn = 0;
-        return;
-      case 'ql':
-        st.align = '';
-        return;
-      case 'qc':
-        st.align = 'center';
-        return;
-      case 'qr':
-        st.align = 'right';
-        return;
-      case 'qj':
-      case 'qd':
-        st.align = 'justify';
         return;
       case 's':
         st.s = param;
@@ -1020,18 +1042,6 @@ function rtfToHtml(input, options) {
         if (has && param > 0) docCp = param;
         st.cp = null;
         return;
-      case 'mac':
-        docCp = 10000;
-        st.cp = null;
-        return;
-      case 'pc':
-        docCp = 437;
-        st.cp = null;
-        return;
-      case 'pca':
-        docCp = 850;
-        st.cp = null;
-        return;
       case 'deff':
         deff = param;
         st.cp = null;
@@ -1039,15 +1049,18 @@ function rtfToHtml(input, options) {
       case 'field':
         if (inBody) inst = '';
         return;
-      default: {
-        const ch = SPECIAL_CHARS[word];
-        if (ch !== undefined) {
-          emitText(ch);
+      default:
+        if (SPECIAL_CHARS.has(word)) {
+          emitText(SPECIAL_CHARS.get(word));
+        } else if (ALIGNMENTS.has(word)) {
+          st.align = ALIGNMENTS.get(word);
         } else if (UNDERLINES.has(word)) {
           st.ul = on;
           st.fmt = null;
+        } else if (CHARSET_WORDS.has(word)) {
+          docCp = CHARSET_WORDS.get(word);
+          st.cp = null;
         }
-      }
     }
   }
 
@@ -1146,7 +1159,7 @@ function rtfToHtml(input, options) {
     } else if (c === 0x7b) {
       i++;
       stack.push(st);
-      st = cloneState(st);
+      st = { ...st };
       skipFb = 0;
       starred = false;
       lead = -1;
@@ -1211,8 +1224,15 @@ function rtfToHtml(input, options) {
         // Octets 8 bits bruts (hors norme mais courants) : décodés comme \'xx.
         const page = curPage();
         if (page.sb) {
-          text = '';
-          for (let k = start; k < j; k++) text += page.sb[b[k]];
+          // Certains générateurs écrivent de l'UTF-8 brut : une suite valide ne
+          // peut guère être autre chose.
+          try {
+            if (!utf8) utf8 = new TextDecoder('utf-8', { fatal: true });
+            text = utf8.decode(b.subarray(start, j));
+          } catch {
+            text = '';
+            for (let k = start; k < j; k++) text += page.sb[b[k]];
+          }
         } else {
           let bytes = b.subarray(start, j);
           if (lead >= 0) bytes = Buffer.concat([Buffer.from([lead]), bytes]);
