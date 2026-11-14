@@ -1,0 +1,132 @@
+{
+  "name": "feuillet",
+  "version": "0.1.0",
+  "description": "Traitement de texte pour documents Word (.docx, .doc…), installable sur Windows.",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "dev:app": "FEUILLET_DEV_URL=http://localhost:5173 electron .",
+    "build": "vite build",
+    "start": "vite build && electron .",
+    "dist": "vite build && node scripts/build-win.js",
+    "test:e2e": "vite build && xvfb-run -a node tests/e2e.js"
+  },
+  "author": "Feuillet",
+  "license": "MIT",
+  "devDependencies": {
+    "@eigenpal/docx-editor-core": "1.9.0",
+    "@eigenpal/docx-editor-i18n": "1.9.0",
+    "@eigenpal/docx-editor-react": "1.9.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "electron": "^45.3.2",
+    "electron-builder": "^26.18.0",
+    "prosemirror-commands": "^1.7.2",
+    "prosemirror-dropcursor": "^1.8.4",
+    "prosemirror-history": "^1.5.1",
+    "prosemirror-keymap": "^1.2.3",
+    "prosemirror-model": "^1.25.13",
+    "prosemirror-state": "^1.4.4",
+    "prosemirror-tables": "^1.8.5",
+    "prosemirror-transform": "^1.12.5",
+    "prosemirror-view": "^1.42.9",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "vite": "^8.3.8"
+  },
+  "dependencies": {
+    "@iarna/rtf-to-html": "^1.1.0",
+    "@turbodocx/html-to-docx": "^1.23.3",
+    "@xmldom/xmldom": "^0.9.12",
+    "jszip": "^3.10.2",
+    "marked": "^18.2.0",
+    "word-extractor": "^1.0.4"
+  },
+  "productName": "Feuillet",
+  "private": true,
+  "build": {
+    "appId": "fr.feuillet.app",
+    "productName": "Feuillet",
+    "copyright": "Feuillet",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**/*",
+      "dist/**/*",
+      "build/icon.png",
+      "package.json"
+    ],
+    "asar": true,
+    "electronLanguages": [
+      "fr",
+      "en-US"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Feuillet",
+      "uninstallDisplayName": "Feuillet",
+      "installerLanguages": [
+        "fr_FR"
+      ],
+      "language": "1036",
+      "runAfterFinish": true,
+      "artifactName": "Feuillet-Setup-${version}.${ext}"
+    },
+    "fileAssociations": [
+      {
+        "ext": "docx",
+        "name": "Document Word",
+        "description": "Document Word",
+        "role": "Editor",
+        "icon": "build/icon.ico"
+      },
+      {
+        "ext": "doc",
+        "name": "Document Word 97-2003",
+        "description": "Document Word 97-2003",
+        "role": "Editor",
+        "icon": "build/icon.ico"
+      },
+      {
+        "ext": "dotx",
+        "name": "Modèle Word",
+        "description": "Modèle Word",
+        "role": "Editor",
+        "icon": "build/icon.ico"
+      },
+      {
+        "ext": "rtf",
+        "name": "Document RTF",
+        "description": "Document RTF",
+        "role": "Editor",
+        "icon": "build/icon.ico"
+      },
+      {
+        "ext": "odt",
+        "name": "Texte OpenDocument",
+        "description": "Texte OpenDocument",
+        "role": "Editor",
+        "icon": "build/icon.ico"
+      }
+    ],
+    "publish": null,
+    "compression": "maximum"
+  }
+}

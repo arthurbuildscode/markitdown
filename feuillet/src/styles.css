@@ -1,0 +1,96 @@
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+.feuillet-splash {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  color: #5f6368;
+  font-size: 14px;
+  background: #f8f9fa;
+}
+
+/* Barre d'accès rapide, à droite du titre du document */
+.feuillet-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: 12px;
+}
+
+.feuillet-actions__status {
+  margin-right: 8px;
+  font-size: 12px;
+  color: #80868b;
+  white-space: nowrap;
+}
+
+.feuillet-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #3c4043;
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.feuillet-actions button:hover {
+  background: #e8eaed;
+}
+
+.feuillet-actions button:focus-visible {
+  outline: 2px solid #1f5fbf;
+  outline-offset: 1px;
+}
+
+.feuillet-actions button.feuillet-actions__primary {
+  background: #1f5fbf;
+  color: #fff;
+}
+
+.feuillet-actions button.feuillet-actions__primary:hover {
+  background: #184c99;
+}
+
+@media (max-width: 1000px) {
+  .feuillet-actions__status {
+    display: none;
+  }
+}
+
+/* Voile affiché pendant l'ouverture ou l'export d'un document */
+.feuillet-busy {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  background: rgba(248, 249, 250, 0.6);
+}
+
+.feuillet-busy__box {
+  padding: 14px 22px;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+  color: #3c4043;
+  font-size: 14px;
+}
+
+/* La barre d'outils défile horizontalement quand la fenêtre est étroite : sans barre de défilement visible. */
+.ep-root [role='toolbar'] {
+  scrollbar-width: none;
+}
