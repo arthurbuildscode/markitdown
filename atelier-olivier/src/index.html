@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' blob:; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' data: blob:; font-src 'self'">
+  <title>L'Atelier d'Olivier</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app" class="no-image">
+    <header class="topbar">
+      <button class="brand" id="brand" type="button" title="À propos de l'atelier">
+        <img src="assets/logo.svg" alt="" width="34" height="34">
+        <span class="brand-text">
+          <span class="brand-name">L’Atelier d’Olivier</span>
+          <span class="brand-sub">retouche photo</span>
+        </span>
+      </button>
+
+      <nav class="toolbar" aria-label="Actions principales">
+        <button class="tool" id="btn-open" type="button" title="Ouvrir une photo (Ctrl+O)">
+          <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+          <span>Ouvrir</span>
+        </button>
+        <button class="tool needs-image" id="btn-undo" type="button" title="Annuler (Ctrl+Z)">
+          <svg viewBox="0 0 24 24"><path d="M9 7 4 12l5 5"/><path d="M4 12h10a6 6 0 0 1 0 12h-1" transform="translate(0 -5)"/></svg>
+          <span>Annuler</span>
+        </button>
+        <button class="tool needs-image" id="btn-redo" type="button" title="Rétablir (Ctrl+Y)">
+          <svg viewBox="0 0 24 24"><path d="m15 7 5 5-5 5"/><path d="M20 12H10a6 6 0 0 0 0 12h1" transform="translate(0 -5)"/></svg>
+          <span>Rétablir</span>
+        </button>
+        <span class="toolbar-sep"></span>
+        <button class="tool needs-image" id="btn-before" type="button" title="Maintenir pour voir la photo avant retouche (touche Espace)">
+          <svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+          <span>Avant</span>
+        </button>
+        <button class="tool needs-image" id="btn-compare" type="button" title="Comparer avant / après côte à côte">
+          <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M12 3v18"/></svg>
+          <span>Comparer</span>
+        </button>
+        <span class="toolbar-sep"></span>
+        <button class="tool needs-image icon-only" id="btn-zoom-out" type="button" title="Zoom arrière">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5M8 11h6"/></svg>
+        </button>
+        <button class="tool needs-image zoom-label" id="btn-zoom-fit" type="button" title="Ajuster à la fenêtre (double-clic sur la photo : 100 %)">Ajuster</button>
+        <button class="tool needs-image icon-only" id="btn-zoom-in" type="button" title="Zoom avant">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5M8 11h6M11 8v6"/></svg>
+        </button>
+        <span class="toolbar-sep"></span>
+        <button class="tool needs-image" id="btn-reset" type="button" title="Remettre tous les réglages à zéro">
+          <svg viewBox="0 0 24 24"><path d="M4 5v5h5"/><path d="M5.5 14a7 7 0 1 0 1.2-6.6L4 10"/></svg>
+          <span>Réinitialiser</span>
+        </button>
+      </nav>
+
+      <button class="primary needs-image" id="btn-save" type="button" title="Enregistrer la photo (Ctrl+S)">
+        <svg viewBox="0 0 24 24"><path d="M12 4v11m0 0-4-4m4 4 4-4"/><path d="M5 19h14"/></svg>
+        <span>Enregistrer…</span>
+      </button>
+    </header>
+
+    <main class="workspace">
+      <section class="stage" id="stage">
+        <canvas id="view"></canvas>
+        <div class="compare-handle" id="compare-handle" hidden>
+          <span class="compare-tag left">Avant</span>
+          <span class="compare-grip"><svg viewBox="0 0 24 24"><path d="m9 7-5 5 5 5M15 7l5 5-5 5"/></svg></span>
+          <span class="compare-tag right">Après</span>
+        </div>
+        <div class="before-badge" id="before-badge" hidden>Avant retouche</div>
+        <div class="crop-layer" id="crop-layer" hidden>
+          <div class="crop-box" id="crop-box">
+            <div class="crop-grid"></div>
+            <span class="crop-handle" data-handle="nw"></span>
+            <span class="crop-handle" data-handle="n"></span>
+            <span class="crop-handle" data-handle="ne"></span>
+            <span class="crop-handle" data-handle="e"></span>
+            <span class="crop-handle" data-handle="se"></span>
+            <span class="crop-handle" data-handle="s"></span>
+            <span class="crop-handle" data-handle="sw"></span>
+            <span class="crop-handle" data-handle="w"></span>
+          </div>
+        </div>
+
+        <div class="welcome" id="welcome">
+          <div class="welcome-card">
+            <img class="welcome-logo" src="assets/logo.svg" alt="" width="92" height="92">
+            <p class="welcome-kicker" id="welcome-kicker">Bonjour Olivier,</p>
+            <h1>bienvenue dans votre atelier.</h1>
+            <p class="welcome-lead">Déposez une photo ici, ou choisissez-en une sur votre ordinateur pour commencer.</p>
+            <button class="primary large" id="btn-welcome-open" type="button">
+              <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+              <span>Choisir une photo</span>
+            </button>
+            <ul class="welcome-points">
+              <li><strong>Retoucher</strong>lumière, couleurs, netteté, recadrage</li>
+              <li><strong>Sublimer</strong>définition augmentée et colorisation automatique</li>
+              <li><strong>Enregistrer</strong>JPEG, PNG, PDF, TIFF, WebP et plus</li>
+            </ul>
+          </div>
+          <p class="welcome-signature">Un atelier taillé sur mesure pour Olivier Denise</p>
+        </div>
+
+        <div class="drop-hint" id="drop-hint" hidden><span>Déposez la photo pour l’ouvrir</span></div>
+
+        <div class="busy" id="busy" hidden>
+          <div class="busy-card">
+            <div class="busy-leaf"><img src="assets/logo.svg" alt="" width="46" height="46"></div>
+            <p class="busy-title" id="busy-title">Un instant…</p>
+            <p class="busy-detail" id="busy-detail"></p>
+            <div class="progress"><div class="progress-bar" id="busy-bar"></div></div>
+            <button class="ghost" id="busy-cancel" type="button">Annuler</button>
+          </div>
+        </div>
+      </section>
+
+      <aside class="panel" id="panel" aria-label="Outils de retouche">
+        <div class="histogram-wrap">
+          <canvas id="histogram" width="560" height="120"></canvas>
+        </div>
+        <div class="tabs" role="tablist">
+          <button class="tab active" data-tab="reglages" type="button" role="tab">Réglages</button>
+          <button class="tab" data-tab="filtres" type="button" role="tab">Filtres</button>
+          <button class="tab" data-tab="cadre" type="button" role="tab">Recadrer</button>
+          <button class="tab" data-tab="magie" type="button" role="tab">Magie</button>
+        </div>
+
+        <div class="panes">
+          <div class="pane active" id="pane-reglages">
+            <button class="magic-button" id="btn-auto" type="button">
+              <svg viewBox="0 0 24 24"><path d="m5 19 9-9M15 4l.9 2.1L18 7l-2.1.9L15 10l-.9-2.1L12 7l2.1-.9zM19 12l.6 1.4L21 14l-1.4.6L19 16l-.6-1.4L17 14l1.4-.6zM7 4l.6 1.4L9 6l-1.4.6L7 8l-.6-1.4L5 6l1.4-.6z"/></svg>
+              <span>Amélioration automatique</span>
+            </button>
+            <div id="slider-groups"></div>
+
+            <details class="group" id="group-nb">
+              <summary>Noir et blanc, virage</summary>
+              <div class="group-body">
+                <label class="switch-row">
+                  <span>Passer en noir et blanc</span>
+                  <input type="checkbox" id="bw-toggle">
+                  <span class="switch"></span>
+                </label>
+                <div class="chips" id="bw-filters"></div>
+                <p class="field-label">Virage (teinte d’ensemble)</p>
+                <div class="swatches" id="tone-swatches"></div>
+                <div id="tone-slider"></div>
+              </div>
+            </details>
+
+            <details class="group" id="group-colorisation">
+              <summary>Colorisation créative</summary>
+              <div class="group-body">
+                <p class="field-help">Teintez séparément les zones sombres et les zones claires.</p>
+                <div id="split-sliders"></div>
+              </div>
+            </details>
+          </div>
+
+          <div class="pane" id="pane-filtres">
+            <p class="pane-intro">Un clic pour changer d’ambiance. Vous pouvez ensuite affiner dans « Réglages ».</p>
+            <div class="preset-grid" id="preset-grid"></div>
+          </div>
+
+          <div class="pane" id="pane-cadre">
+            <p class="field-label">Pivoter et retourner</p>
+            <div class="button-grid four">
+              <button class="ghost tall" id="btn-rot-left" type="button"><svg viewBox="0 0 24 24"><path d="M4 5v5h5"/><path d="M5.5 14a7 7 0 1 0 1.2-6.6L4 10"/></svg><span>Gauche</span></button>
+              <button class="ghost tall" id="btn-rot-right" type="button"><svg viewBox="0 0 24 24"><path d="M20 5v5h-5"/><path d="M18.5 14a7 7 0 1 1-1.2-6.6L20 10"/></svg><span>Droite</span></button>
+              <button class="ghost tall" id="btn-flip-h" type="button"><svg viewBox="0 0 24 24"><path d="M12 3v18M8 7l-5 5 5 5zM16 7l5 5-5 5z"/></svg><span>Miroir</span></button>
+              <button class="ghost tall" id="btn-flip-v" type="button"><svg viewBox="0 0 24 24"><path d="M3 12h18M7 8l5-5 5 5zM7 16l5 5 5-5z"/></svg><span>Renverser</span></button>
+            </div>
+
+            <p class="field-label">Format du cadre</p>
+            <div class="chips" id="aspect-chips"></div>
+
+            <div id="angle-slider"></div>
+
+            <p class="crop-size" id="crop-size"></p>
+            <div class="button-grid two">
+              <button class="ghost" id="btn-crop-cancel" type="button">Annuler</button>
+              <button class="primary" id="btn-crop-apply" type="button">Appliquer le cadre</button>
+            </div>
+            <p class="field-help">Faites glisser les poignées sur la photo pour recadrer. Le curseur redresse l’horizon.</p>
+          </div>
+
+          <div class="pane" id="pane-magie">
+            <div class="card">
+              <h3>Améliorer la définition</h3>
+              <p>Un modèle d’intelligence artificielle reconstruit les détails : idéal pour les petites photos, les scans ou les images un peu floues.</p>
+              <p class="card-meta" id="size-info"></p>
+              <div class="stack">
+                <button class="ghost wide" data-upscale="1" type="button"><strong>Restaurer</strong><span id="up-1">même taille, détails ravivés</span></button>
+                <button class="ghost wide" data-upscale="2" type="button"><strong>Agrandir ×2</strong><span id="up-2"></span></button>
+                <button class="ghost wide" data-upscale="4" type="button"><strong>Agrandir ×4</strong><span id="up-4"></span></button>
+              </div>
+            </div>
+            <div class="card">
+              <h3>Coloriser une photo noir et blanc</h3>
+              <p>Redonne automatiquement des couleurs plausibles aux photos anciennes. Ajustez ensuite la saturation à votre goût.</p>
+              <button class="primary wide" id="btn-colorize" type="button">
+                <svg viewBox="0 0 24 24"><path d="M12 3c4 4.500 6 7.500 6 10.500a6 6 0 0 1-12 0C6 10.500 8 7.500 12 3z"/></svg>
+                <span>Coloriser la photo</span>
+              </button>
+            </div>
+            <p class="field-help">Tout se passe sur cet ordinateur : aucune photo n’est envoyée sur Internet.</p>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <footer class="statusbar">
+      <span id="status-file">Aucune photo ouverte</span>
+      <span id="status-size"></span>
+      <span id="status-zoom"></span>
+      <span class="status-spacer"></span>
+      <span class="status-signature">Fait avec affection pour Olivier Denise</span>
+    </footer>
+  </div>
+
+  <dialog id="export-dialog" class="dialog">
+    <form method="dialog" class="dialog-body" id="export-form">
+      <h2>Enregistrer la photo</h2>
+      <p class="field-label">Format</p>
+      <div class="format-grid" id="format-grid"></div>
+
+      <div class="field" id="quality-field">
+        <div id="quality-slider"></div>
+      </div>
+
+      <div class="field-row">
+        <label class="field">
+          <span class="field-label">Taille</span>
+          <select id="export-size"></select>
+        </label>
+        <label class="field" id="custom-size-field" hidden>
+          <span class="field-label">Largeur (pixels)</span>
+          <input type="number" id="export-width" min="16" max="16000" step="1">
+        </label>
+        <label class="field" id="pdf-field" hidden>
+          <span class="field-label">Mise en page</span>
+          <select id="pdf-layout">
+            <option value="a4">Page A4, photo centrée</option>
+            <option value="image">Page aux dimensions de la photo</option>
+          </select>
+        </label>
+      </div>
+      <p class="export-summary" id="export-summary"></p>
+
+      <div class="dialog-actions">
+        <button class="ghost" value="cancel" type="submit" formnovalidate>Annuler</button>
+        <button class="primary" id="export-confirm" value="ok" type="submit">Choisir l’emplacement…</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="about-dialog" class="dialog about">
+    <form method="dialog" class="dialog-body">
+      <img src="assets/logo.svg" alt="" width="84" height="84">
+      <h2>L’Atelier d’Olivier</h2>
+      <p class="about-version" id="about-version"></p>
+      <p class="about-dedication">Imaginé et assemblé tout spécialement pour <strong>Olivier Denise</strong>.<br>Que chaque photo y trouve sa plus belle lumière.</p>
+      <p class="about-credits">Construit avec des briques libres : Electron, ONNX Runtime, Real-ESRGAN (X. Wang et al.), Colorization (R. Zhang et al.), pdf-lib, UTIF, gifenc, libheif, libavif, polices Fraunces et Inter.</p>
+      <div class="dialog-actions center">
+        <button class="primary" value="ok" type="submit">Retour à l’atelier</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

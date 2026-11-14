@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#55632d"/>
+      <stop offset="1" stop-color="#1c2211"/>
+    </linearGradient>
+    <linearGradient id="leaf" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#f1ecc6"/>
+      <stop offset="1" stop-color="#c3cc74"/>
+    </linearGradient>
+    <radialGradient id="olive" cx=".35" cy=".3" r=".8">
+      <stop offset="0" stop-color="#e6cf7a"/>
+      <stop offset="1" stop-color="#b8962f"/>
+    </radialGradient>
+    <path id="l" d="M0 0 Q 24 -17 62 0 Q 24 17 0 0 Z"/>
+  </defs>
+  <rect width="256" height="256" rx="58" fill="url(#bg)"/>
+  <circle cx="128" cy="128" r="96" fill="none" stroke="#e6cf7a" stroke-opacity=".28" stroke-width="4"/>
+  <path d="M58 202 C 98 174, 150 122, 198 56" stroke="#e9e4b8" stroke-width="7" fill="none" stroke-linecap="round"/>
+  <g fill="url(#leaf)">
+    <use href="#l" transform="translate(84 181) rotate(-104)"/>
+    <use href="#l" transform="translate(110 157) rotate(-98) scale(1.05)"/>
+    <use href="#l" transform="translate(139 127) rotate(-92)"/>
+    <use href="#l" transform="translate(168 94) rotate(-84) scale(.85)"/>
+    <use href="#l" transform="translate(96 170) rotate(14) scale(.95)"/>
+    <use href="#l" transform="translate(152 113) rotate(4) scale(.9)"/>
+    <use href="#l" transform="translate(192 64) rotate(-52) scale(.7)"/>
+  </g>
+  <path d="M124 143 C 134 150, 140 158, 143 168" stroke="#e9e4b8" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <path d="M124 143 C 140 146, 158 150, 172 160" stroke="#e9e4b8" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <ellipse cx="146" cy="186" rx="15" ry="19" fill="url(#olive)" transform="rotate(-12 146 186)"/>
+  <ellipse cx="184" cy="172" rx="14" ry="18" fill="url(#olive)" transform="rotate(-30 184 172)"/>
+</svg>
