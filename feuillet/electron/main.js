@@ -207,7 +207,8 @@ function buildMenu() {
               title: `À propos de ${APP_NAME}`,
               message: `${APP_NAME} ${app.getVersion()}`,
               detail:
-                'Traitement de texte pour documents Word.\n\n' +
+                'Traitement de texte pour documents Word.\n' +
+                'Édition spéciale, conçue pour Olivier Denise. 😉\n\n' +
                 'Moteur d’édition : docx-editor (Apache-2.0). ' +
                 'Conversions : html-to-docx, word-extractor, marked (MIT).',
               buttons: ['OK'],

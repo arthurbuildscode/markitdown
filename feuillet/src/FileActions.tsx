@@ -11,7 +11,8 @@ function Icon({ children }: { children: ReactNode }) {
 
 export function AppLogo() {
   return (
-    <svg width="34" height="34" viewBox="0 0 64 64" aria-hidden="true">
+    <svg width="34" height="34" viewBox="0 0 64 64" role="img" aria-label="Feuillet">
+      <title>Feuillet — fait sur mesure pour Olivier Denise</title>
       <rect width="64" height="64" rx="14" fill="#1f5fbf" />
       <path d="M19 12h19l9 9v29a3 3 0 0 1-3 3H19a3 3 0 0 1-3-3V15a3 3 0 0 1 3-3z" fill="#fff" />
       <path d="M38 12v6a3 3 0 0 0 3 3h6z" fill="#b9d2f5" />
@@ -20,6 +21,12 @@ export function AppLogo() {
       <rect x="22" y="42" width="12" height="3" rx="1.5" fill="#1f5fbf" />
     </svg>
   );
+}
+
+/** Clin d'œil à l'utilisateur pour qui Feuillet a été conçu. */
+function greeting(): string {
+  const hour = new Date().getHours();
+  return `${hour >= 18 || hour < 5 ? 'Bonsoir' : 'Bonjour'} Olivier 😉`;
 }
 
 interface Props {
@@ -37,7 +44,7 @@ export function FileActions({ dirty, onNew, onOpen, onSave, onSaveAs, onExportPd
   return (
     <div className="feuillet-actions" role="toolbar" aria-label="Fichier">
       <span className="feuillet-actions__status" aria-live="polite">
-        {dirty ? 'Modifications non enregistrées' : ''}
+        {dirty ? 'Modifications non enregistrées' : greeting()}
       </span>
       <button type="button" onClick={onNew} title="Nouveau document (Ctrl+N)">
         <Icon>
