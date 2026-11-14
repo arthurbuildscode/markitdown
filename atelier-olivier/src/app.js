@@ -8,7 +8,7 @@ const $ = (selector) => document.querySelector(selector);
 const api = window.atelier;
 const app = $('#app');
 const stage = $('#stage');
-const viewCanvas = $('#view');
+const viewHost = $('#view');
 
 const state = {
   file: null,
@@ -217,7 +217,7 @@ function draw() {
 }
 
 function onSettled() {
-  if (!state.base || state.busy) return;
+  if (!state.base || state.busy || !engine.isHealthy()) return;
   drawHistogram(analyse(engine.renderThumbnail(state.params, 256)).hist);
   const current = state.params;
   document.querySelectorAll('.preset').forEach((button) => {
@@ -255,7 +255,7 @@ function drawHistogram(hist) {
 }
 
 function stageDevice() {
-  return { w: viewCanvas.width, h: viewCanvas.height };
+  return { w: engine.canvas.width, h: engine.canvas.height };
 }
 
 function fitZoom() {
@@ -298,11 +298,12 @@ function zoomAt(factor, mx = 0, my = 0, absolute = null) {
 }
 
 function resizeStage() {
+  if (!engine) return;
   const w = Math.max(1, Math.round(stage.clientWidth * dpr()));
   const h = Math.max(1, Math.round(stage.clientHeight * dpr()));
-  if (viewCanvas.width !== w || viewCanvas.height !== h) {
-    viewCanvas.width = w;
-    viewCanvas.height = h;
+  if (engine.canvas.width !== w || engine.canvas.height !== h) {
+    engine.canvas.width = w;
+    engine.canvas.height = h;
   }
   if (!state.splitX || state.splitX > w) state.splitX = w / 2;
   if (!state.base) return;
@@ -416,6 +417,7 @@ async function openBytes(bytes, name, filePath = null) {
     state.history = [];
     state.index = -1;
     state.crop = null;
+    app.classList.remove('cropping');
     state.compare = false;
     $('#btn-compare').classList.remove('active');
     state.base = null;
@@ -456,7 +458,7 @@ let presetTimer = 0;
 function schedulePresetThumbnails() {
   clearTimeout(presetTimer);
   presetTimer = setTimeout(() => {
-    if (!state.base || state.busy) return;
+    if (!state.base || state.busy || !engine.isHealthy()) return;
     document.querySelectorAll('.preset').forEach((button) => {
       const preset = PRESETS.find((p) => p.id === button.dataset.preset);
       const data = engine.renderThumbnail({ ...DEFAULTS, ...preset.params }, 260);
@@ -528,6 +530,9 @@ function resolvedAspect() {
 }
 
 function startCrop() {
+  app.classList.add('cropping');
+  state.compare = false;
+  $('#btn-compare').classList.remove('active');
   state.crop = {
     angle: 0,
     aspectId: 'libre',
@@ -544,6 +549,7 @@ function startCrop() {
 }
 
 function stopCrop() {
+  app.classList.remove('cropping');
   if (!state.crop) return;
   state.crop = null;
   fitView();
@@ -581,6 +587,7 @@ function bakeCrop() {
     ctx.translate(w / 2 - rect.cx, h / 2 - rect.cy);
     ctx.rotate(rad(angle));
     ctx.drawImage(state.base, -state.base.width / 2, -state.base.height / 2);
+    app.classList.remove('cropping');
     state.crop = null;
     view.fit = true;
     setBase(out);
@@ -833,7 +840,15 @@ async function produceFile(options, onProgress = () => {}) {
   const format = FORMATS.find((f) => f.id === options.format);
   let canvas = state.base;
   if (!isNeutral(state.params)) {
-    canvas = await engine.renderFull(state.params, (p) => onProgress(p * 0.7, 'Développement en pleine définition…'));
+    const develop = () => engine.renderFull(state.params, (p) => onProgress(p * 0.7, 'Développement en pleine définition…'));
+    try {
+      canvas = await develop();
+    } catch (error) {
+      console.warn('Nouvel essai après une interruption graphique', error);
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      engine.recover();
+      canvas = await develop();
+    }
   }
   const dims = options.dimensions || { width: canvas.width, height: canvas.height };
   if (dims.width !== canvas.width || dims.height !== canvas.height) {
@@ -1066,13 +1081,13 @@ function buildPanel() {
 
 function setupStageInteractions() {
   let pan = null;
-  viewCanvas.addEventListener('pointerdown', (event) => {
+  viewHost.addEventListener('pointerdown', (event) => {
     if (!state.base || state.crop || event.button !== 0) return;
-    viewCanvas.setPointerCapture(event.pointerId);
+    viewHost.setPointerCapture(event.pointerId);
     pan = { x: event.clientX, y: event.clientY, panX: view.panX, panY: view.panY };
-    viewCanvas.classList.add('panning');
+    viewHost.classList.add('panning');
   });
-  viewCanvas.addEventListener('pointermove', (event) => {
+  viewHost.addEventListener('pointermove', (event) => {
     if (!pan) return;
     view.panX = pan.panX + (event.clientX - pan.x) * dpr();
     view.panY = pan.panY + (event.clientY - pan.y) * dpr();
@@ -1083,10 +1098,10 @@ function setupStageInteractions() {
   });
   const endPan = () => {
     pan = null;
-    viewCanvas.classList.remove('panning');
+    viewHost.classList.remove('panning');
   };
-  viewCanvas.addEventListener('pointerup', endPan);
-  viewCanvas.addEventListener('pointercancel', endPan);
+  viewHost.addEventListener('pointerup', endPan);
+  viewHost.addEventListener('pointercancel', endPan);
 
   const pointerOffset = (event) => {
     const box = stage.getBoundingClientRect();
@@ -1102,7 +1117,7 @@ function setupStageInteractions() {
     },
     { passive: false },
   );
-  viewCanvas.addEventListener('dblclick', (event) => {
+  viewHost.addEventListener('dblclick', (event) => {
     if (!state.base || state.crop) return;
     if (view.fit) {
       const [mx, my] = pointerOffset(event);
@@ -1122,7 +1137,7 @@ function setupStageInteractions() {
   handle.addEventListener('pointermove', (event) => {
     if (!sliding) return;
     const box = stage.getBoundingClientRect();
-    state.splitX = clamp((event.clientX - box.left) * dpr(), 20, viewCanvas.width - 20);
+    state.splitX = clamp((event.clientX - box.left) * dpr(), 20, engine.canvas.width - 20);
     requestDraw();
   });
   handle.addEventListener('pointerup', () => (sliding = false));
@@ -1255,8 +1270,12 @@ async function start() {
   refreshHistoryUi();
 
   try {
-    engine = new Engine(viewCanvas);
-    engine.onContextRestored = requestDraw;
+    engine = new Engine(viewHost);
+    engine.onContextRestored = () => {
+      schedulePresetThumbnails();
+      requestDraw();
+    };
+    resizeStage();
   } catch (error) {
     console.error(error);
     $('.welcome-lead').textContent = 'Cet ordinateur ne permet pas l’affichage accéléré (WebGL 2) nécessaire à l’atelier. Mettez à jour le pilote de la carte graphique puis relancez.';

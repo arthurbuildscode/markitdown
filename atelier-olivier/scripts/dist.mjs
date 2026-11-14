@@ -9,8 +9,11 @@ for (const model of ['models/upscale-x4.onnx', 'models/colorize.onnx']) {
   }
 }
 
+// « --dir-local » : empaquette pour le système courant sans installateur (sert aux tests).
+const localDir = process.argv.includes('--dir-local');
+
 await build({
-  targets: Platform.WINDOWS.createTarget(['nsis'], Arch.x64),
+  targets: localDir ? Platform.current().createTarget(['dir'], Arch.x64) : Platform.WINDOWS.createTarget(['nsis'], Arch.x64),
   config: {
     appId: 'fr.denise.atelier-olivier',
     productName: 'Atelier Olivier',
@@ -19,7 +22,7 @@ await build({
     files: ['main.js', 'preload.js', 'package.json', 'dist/**/*', 'build/icon.png'],
     extraResources: [{ from: 'models', to: 'models', filter: ['*.onnx'] }],
     electronLanguages: ['fr', 'en-US'],
-    compression: 'normal',
+    compression: 'maximum',
     win: { icon: 'build/icon.ico', legalTrademarks: "L'Atelier d'Olivier" },
     nsis: {
       oneClick: true,

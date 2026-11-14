@@ -206,6 +206,8 @@ if (!app.requestSingleInstanceLock()) {
     if (file) mainWindow.webContents.send('open-path', file);
   });
 
+  app.setAppUserModelId('fr.denise.atelier-olivier');
+
   app.whenReady().then(() => {
     Menu.setApplicationMenu(null);
     registerAppProtocol();

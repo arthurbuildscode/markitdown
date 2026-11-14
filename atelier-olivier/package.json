@@ -8,7 +8,7 @@
   "private": true,
   "main": "main.js",
   "scripts": {
-    "build": "node scripts/build.mjs",
+    "build": "node scripts/build.mjs --minify",
     "start": "npm run build && electron .",
     "test": "npm run build && node scripts/smoke-test.mjs",
     "dist": "npm run build && node scripts/dist.mjs"
@@ -24,6 +24,7 @@
     "libheif-js": "^1.23.5",
     "onnxruntime-web": "^1.31.1",
     "pdf-lib": "^1.17.1",
+    "playwright-core": "^1.65.1",
     "utif2": "^4.1.0"
   }
 }

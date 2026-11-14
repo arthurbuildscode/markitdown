@@ -138,6 +138,10 @@ def main():
     col.load_state_dict(torch.load(fetch("siggraph17-df00044c.pth"), map_location="cpu", weights_only=True), strict=True)
     export(col, torch.rand(1, 1, 64, 64) * 100, os.path.join(OUT, "colorize.onnx"), "lum", "ab")
 
+    # Poids stockés en float16 : fichier deux fois plus léger, résultat visuellement identique.
+    import subprocess
+    subprocess.run([sys.executable, os.path.join(ROOT, "scripts", "shrink_model.py"), os.path.join(OUT, "colorize.onnx")], check=True)
+
 
 if __name__ == "__main__":
     main()

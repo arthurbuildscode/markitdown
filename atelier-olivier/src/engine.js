@@ -281,20 +281,66 @@ function hueMatrix(hue) {
 }
 
 export class Engine {
-  constructor(canvas) {
-    this.canvas = canvas;
+  /** host : élément qui accueille le canvas d'affichage (créé et, si besoin, recréé ici). */
+  constructor(host) {
+    this.host = host;
     this.image = null;
+    this.canvas = null;
     this.onContextRestored = null;
+    this.createCanvas();
+    this.init();
+  }
+
+  createCanvas() {
+    const previous = this.canvas;
+    const canvas = document.createElement('canvas');
+    if (previous) {
+      canvas.width = previous.width;
+      canvas.height = previous.height;
+      previous.remove();
+    }
     canvas.addEventListener('webglcontextlost', (event) => {
       event.preventDefault();
+      if (canvas !== this.canvas) return;
       this.ready = false;
+      // Si le navigateur ne rétablit pas le contexte de lui-même, on repart d'un canvas neuf.
+      clearTimeout(this.recoverTimer);
+      this.recoverTimer = setTimeout(() => this.recover(), 1500);
     });
     canvas.addEventListener('webglcontextrestored', () => {
+      if (canvas === this.canvas) this.reinitialise();
+    });
+    this.host.append(canvas);
+    this.canvas = canvas;
+  }
+
+  reinitialise() {
+    clearTimeout(this.recoverTimer);
+    try {
       this.init();
       if (this.image) this.setImage(this.image);
-      if (this.onContextRestored) this.onContextRestored();
-    });
-    this.init();
+    } catch (error) {
+      console.warn('Réinitialisation graphique impossible', error);
+      this.ready = false;
+      return false;
+    }
+    if (this.onContextRestored) this.onContextRestored();
+    return true;
+  }
+
+  isHealthy() {
+    return Boolean(this.ready && this.gl && !this.gl.isContextLost());
+  }
+
+  /** Recrée le canvas et le contexte graphique après une perte (pilote, veille, bureau à distance...). */
+  recover() {
+    if (this.isHealthy()) return true;
+    this.createCanvas();
+    return this.reinitialise();
+  }
+
+  ensureReady() {
+    if (!this.isHealthy() && !this.recover()) throw new Error('Affichage graphique indisponible');
   }
 
   init() {
@@ -508,7 +554,7 @@ export class Engine {
    * view : { zoom, panX, panY, rotation } en pixels physiques ; zoom = px écran par px image.
    */
   render(params, view, { split = -1, bypass = false } = {}) {
-    if (!this.ready || !this.image) return;
+    if (!this.isHealthy() || !this.image) return;
     const gl = this.gl;
     const cw = this.canvas.width;
     const ch = this.canvas.height;
@@ -532,6 +578,7 @@ export class Engine {
 
   /** Rend l'image entière en miniature (pour les filtres et l'histogramme). */
   renderThumbnail(params, maxSide, { bypass = false } = {}) {
+    this.ensureReady();
     const gl = this.gl;
     const scale = Math.min(1, maxSide / Math.max(this.width, this.height));
     const tw = Math.max(1, Math.round(this.width * scale));
@@ -552,6 +599,7 @@ export class Engine {
    * onProgress(fraction) est appelé régulièrement ; la fonction rend la main entre les tuiles.
    */
   async renderFull(params, onProgress) {
+    this.ensureReady();
     const gl = this.gl;
     const image = this.image;
     const W = image.width;
@@ -567,7 +615,6 @@ export class Engine {
 
     for (let ty = 0; ty < H; ty += tile) {
       for (let tx = 0; tx < W; tx += tile) {
-        if (!this.ready) throw new Error('Contexte graphique perdu');
         const tw = Math.min(tile, W - tx);
         const th = Math.min(tile, H - ty);
         const px = Math.max(0, tx - TILE_PAD);
@@ -588,6 +635,7 @@ export class Engine {
         const pixels = new Uint8ClampedArray(tw * th * 4);
         gl.readPixels(0, 0, tw, th, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
         gl.deleteTexture(tex);
+        if (gl !== this.gl || gl.isContextLost()) throw new Error('Contexte graphique perdu');
         octx.putImageData(new ImageData(pixels, tw, th), tx, ty);
         done += 1;
         if (onProgress) onProgress(done / total);
